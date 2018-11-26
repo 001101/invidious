@@ -4,7 +4,7 @@
 <% end %>
 
 <div class="pure-g">
-<% top_videos.each_slice(4) do |slice| %>
+<% popular_videos.each_slice(4) do |slice| %>
         <% slice.each do |item| %>
             <%= rendered "components/item" %>
         <% end %>
