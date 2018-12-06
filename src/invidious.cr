@@ -726,6 +726,7 @@ post "/login" do |env|
 
       lookup_results = client.post("/_/signin/sl/lookup", headers, login_req(inputs, lookup_req))
       headers = lookup_results.cookies.add_request_headers(headers)
+      error_message = "Got lookup.\n"
 
       lookup_results = lookup_results.body
       lookup_results = lookup_results[5..-1]
@@ -747,6 +748,7 @@ post "/login" do |env|
 
       challenge_results = client.post("/_/signin/sl/challenge", headers, login_req(inputs, challenge_req))
       headers = challenge_results.cookies.add_request_headers(headers)
+      error_message += "Got challenge results.\n"
 
       challenge_results = challenge_results.body
       challenge_results = challenge_results[5..-1]
@@ -760,6 +762,7 @@ post "/login" do |env|
       end
 
       if challenge_results[0][-1][0].as_a?
+        error_message += "User has TFA.\n"
         # Prefer Authenticator app and SMS over unsupported protocols
         if challenge_results[0][-1][0][0][8] != 6 || challenge_results[0][-1][0][0][8] != 9
           tfa = challenge_results[0][-1][0].as_a.select { |auth_type| auth_type[8] == 6 || auth_type[8] == 9 }[0]
@@ -770,6 +773,7 @@ post "/login" do |env|
           tfa = client.post("/_/signin/selectchallenge?TL=#{tl}", headers, login_req(inputs, select_challenge)).body
           tfa = tfa[5..-1]
           tfa = JSON.parse(tfa)[0][-1]
+          error_message += "Picked TFA.\n"
         else
           tfa = challenge_results[0][-1][0][0]
         end
@@ -791,9 +795,11 @@ post "/login" do |env|
           when 6
             # Authenticator app
             tfa_req = %(["#{user_hash}",null,2,null,[6,null,null,null,null,["#{tfa_code}",false]]])
+            error_message += "Trying authenticator.\n"
           when 9
             # Voice or text message
             tfa_req = %(["#{user_hash}",null,2,null,[9,null,null,null,null,null,null,null,[null,"#{tfa_code}",false,2]]])
+            error_message += "Trying text message.\n"
           else
             error_message = "Unable to login, make sure two-factor authentication (Authenticator or SMS) is enabled."
             next templated "error"
@@ -843,11 +849,14 @@ post "/login" do |env|
         cookie.extension = cookie.extension.not_nil!.gsub("Secure; ", "")
       end
 
+      raise "Done."
       login.cookies.add_response_headers(env.response.headers)
 
       env.redirect referer
     rescue ex
-      error_message = "Login failed. This may be because two-factor authentication is not enabled on your account."
+      error_message ||= ""
+      error_message += (ex.message || "")
+      # error_message = "Login failed. This may be because two-factor authentication is not enabled on your account."
       next templated "error"
     end
   elsif account_type == "invidious"
