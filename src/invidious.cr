@@ -781,13 +781,13 @@ post "/login" do |env|
         error_message += tfa.to_pretty_json
         error_message += "Trying TFA.\n"
 
+        if !tfa_code
+          next env.redirect "/login?tfa=true&type=google&referer=#{URI.escape(referer)}"
+        end
+
         if tfa[5] == "QUOTA_EXCEEDED"
           error_message = "Quota exceeded, try again in a few hours"
           next templated "error"
-        end
-
-        if !tfa_code
-          next env.redirect "/login?tfa=true&type=google&referer=#{URI.escape(referer)}"
         end
 
         tl = challenge_results[1][2]
