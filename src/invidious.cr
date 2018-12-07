@@ -778,44 +778,45 @@ post "/login" do |env|
           tfa = challenge_results[0][-1][0][0]
         end
 
-        if tfa[2] == "TWO_STEP_VERIFICATION"
-          if tfa[5] == "QUOTA_EXCEEDED"
-            error_message = "Quota exceeded, try again in a few hours"
-            next templated "error"
-          end
+        error_message += tfa.to_pretty_json
+        error_message += "Trying TFA.\n"
 
-          if !tfa_code
-            next env.redirect "/login?tfa=true&type=google&referer=#{URI.escape(referer)}"
-          end
+        if tfa[5] == "QUOTA_EXCEEDED"
+          error_message = "Quota exceeded, try again in a few hours"
+          next templated "error"
+        end
 
-          tl = challenge_results[1][2]
+        if !tfa_code
+          next env.redirect "/login?tfa=true&type=google&referer=#{URI.escape(referer)}"
+        end
 
-          request_type = tfa[8]
-          case request_type
-          when 6
-            # Authenticator app
-            tfa_req = %(["#{user_hash}",null,2,null,[6,null,null,null,null,["#{tfa_code}",false]]])
-            error_message += "Trying authenticator.\n"
-          when 9
-            # Voice or text message
-            tfa_req = %(["#{user_hash}",null,2,null,[9,null,null,null,null,null,null,null,[null,"#{tfa_code}",false,2]]])
-            error_message += "Trying text message.\n"
-          else
-            error_message = "Unable to login, make sure two-factor authentication (Authenticator or SMS) is enabled."
-            next templated "error"
-          end
+        tl = challenge_results[1][2]
 
-          challenge_results = client.post("/_/signin/challenge?hl=en&TL=#{tl}", headers, login_req(inputs, tfa_req))
-          headers = challenge_results.cookies.add_request_headers(headers)
+        request_type = tfa[8]
+        case request_type
+        when 6
+          # Authenticator app
+          tfa_req = %(["#{user_hash}",null,2,null,[6,null,null,null,null,["#{tfa_code}",false]]])
+          error_message += "Trying authenticator.\n"
+        when 9
+          # Voice or text message
+          tfa_req = %(["#{user_hash}",null,2,null,[9,null,null,null,null,null,null,null,[null,"#{tfa_code}",false,2]]])
+          error_message += "Trying text message.\n"
+        else
+          error_message = "Unable to login, make sure two-factor authentication (Authenticator or SMS) is enabled."
+          next templated "error"
+        end
 
-          challenge_results = challenge_results.body
-          challenge_results = challenge_results[5..-1]
-          challenge_results = JSON.parse(challenge_results)
+        challenge_results = client.post("/_/signin/challenge?hl=en&TL=#{tl}", headers, login_req(inputs, tfa_req))
+        headers = challenge_results.cookies.add_request_headers(headers)
 
-          if challenge_results[0][-1]?.try &.[5] == "INCORRECT_ANSWER_ENTERED"
-            error_message = "Invalid TFA code"
-            next templated "error"
-          end
+        challenge_results = challenge_results.body
+        challenge_results = challenge_results[5..-1]
+        challenge_results = JSON.parse(challenge_results)
+
+        if challenge_results[0][-1]?.try &.[5] == "INCORRECT_ANSWER_ENTERED"
+          error_message = "Invalid TFA code"
+          next templated "error"
         end
       end
 
